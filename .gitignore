@@ -23,6 +23,9 @@ figures/*
 logs/*
 !logs/.gitkeep
 
+# Local leftover folder from the previous nested layout
+project/
+
 # Model and experiment outputs
 *.pt
 *.pth
