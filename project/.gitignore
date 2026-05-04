@@ -1,0 +1,41 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local environment files
+.env
+.env.*
+
+# Dataset downloads and generated artifacts
+data/*
+!data/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+results/*
+!results/.gitkeep
+figures/*
+!figures/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Model and experiment outputs
+*.pt
+*.pth
+*.ckpt
+*.csv
+*.png
+*.jpg
+*.jpeg
+*.npy
+*.npz
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
