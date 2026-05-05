@@ -15,22 +15,23 @@ Part A focuses on performance evidence:
 
 ```text
 .
-├── config.py
-├── data.py
-├── models.py
-├── sam.py
-├── train.py
-├── evaluate.py
-├── run_experiment.py
-├── plot_results.py
-├── utils.py
-├── requirements.txt
-├── tests/
-├── data/
-├── checkpoints/
-├── results/
-├── figures/
-└── logs/
+|-- config.py
+|-- data.py
+|-- models.py
+|-- sam.py
+|-- train.py
+|-- evaluate.py
+|-- run_experiment.py
+|-- plot_results.py
+|-- utils.py
+|-- requirements.txt
+|-- Run_PartA_Colab.ipynb
+|-- tests/
+|-- data/
+|-- checkpoints/
+|-- results/
+|-- figures/
+`-- logs/
 ```
 
 ## Setup
@@ -50,6 +51,10 @@ python run_experiment.py
 ```bash
 python plot_results.py
 ```
+
+## Colab
+
+Open `Run_PartA_Colab.ipynb` in Google Colab to run the experiment on a GPU and save checkpoints/results to Google Drive.
 
 ## Expected Outputs
 
