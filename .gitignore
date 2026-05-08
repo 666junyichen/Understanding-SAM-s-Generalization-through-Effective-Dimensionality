@@ -37,6 +37,16 @@ project/
 *.npy
 *.npz
 
+# Keep Part B analysis artifacts in Git for the report.
+!part_b/
+!part_b/*.ipynb
+!part_b/*.csv
+!part_b/*.png
+!part_b/README.md
+
+# Archives are local transfer artifacts.
+*.zip
+
 # OS/editor files
 .DS_Store
 Thumbs.db
