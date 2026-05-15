@@ -49,10 +49,11 @@ The notebook will:
 
 1. Mount Google Drive.
 2. Install dependencies.
-3. Run `python run_experiment.py`.
-4. Run `python plot_results.py`.
-5. Inspect generated checkpoints, CSV files, and figures.
-6. Optionally load one selected checkpoint to verify it can be reused.
+3. Clear old generated files from `checkpoints/`, `results/`, and `figures/`.
+4. Run `python run_experiment.py`.
+5. Run `python plot_results.py`.
+6. Inspect generated checkpoints, CSV files, and figures.
+7. Optionally load one selected checkpoint to verify it can be reused.
 
 ## Local Setup
 
