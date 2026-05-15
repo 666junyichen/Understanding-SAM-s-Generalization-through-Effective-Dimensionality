@@ -29,6 +29,15 @@ def main() -> None:
     plot_loss_curves(sgd_log, sam_log, FIGURES_DIR / "loss_plot.png")
     plot_accuracy_curves(sgd_log, sam_log, FIGURES_DIR / "accuracy_plot.png")
     plot_ood_bar_chart(metrics, FIGURES_DIR / "ood_bar_chart.png")
+    plot_per_corruption_delta(metrics, FIGURES_DIR / "per_corruption_delta.png")
+    plot_best_vs_final_id_acc(sgd_log, sam_log, FIGURES_DIR / "best_vs_final_id_acc.png")
+    plot_checkpoint_comparison(metrics, FIGURES_DIR / "checkpoint_comparison.png")
+    plot_generalization_gap(metrics, FIGURES_DIR / "generalization_gap.png")
+
+    if _has_columns(sgd_log, ["avg_ood_acc"]) and _has_columns(sam_log, ["avg_ood_acc"]):
+        plot_ood_trajectory(sgd_log, sam_log, FIGURES_DIR / "ood_trajectory.png")
+    else:
+        print("Skipped ood_trajectory.png because training logs do not contain OOD metrics yet.")
 
     summary = create_summary_table(metrics_path, sgd_log_path, sam_log_path)
     summary.to_csv(RESULTS_DIR / "summary_table.csv", index=False)
@@ -47,7 +56,7 @@ def load_training_logs(
 
 
 def load_metrics(metrics_path: str | Path) -> pd.DataFrame:
-    """Load final ID/OOD metrics."""
+    """Load ID/OOD metrics for one or more checkpoint strategies."""
     return _read_csv(metrics_path)
 
 
@@ -93,6 +102,7 @@ def plot_accuracy_curves(
 
 def plot_ood_bar_chart(metrics: pd.DataFrame, output_path: str | Path) -> None:
     """Plot ID/OOD robustness comparison for SGD and SAM."""
+    metrics = _select_checkpoint_rows(metrics, preferred_checkpoint="best_ood")
     metrics = metrics.set_index("optimizer")
     categories = ["noise", "blur", "brightness", "avg_ood"]
     labels = ["Noise", "Blur", "Brightness", "Avg OOD"]
@@ -125,20 +135,173 @@ def plot_ood_bar_chart(metrics: pd.DataFrame, output_path: str | Path) -> None:
     _save_figure(fig, output_path)
 
 
+def plot_per_corruption_delta(metrics: pd.DataFrame, output_path: str | Path) -> None:
+    """Plot SAM minus SGD accuracy for each OOD corruption."""
+    metrics = _select_checkpoint_rows(metrics, preferred_checkpoint="best_ood").set_index("optimizer")
+    categories = [
+        ("ood_noise_acc", "Noise"),
+        ("ood_blur_acc", "Blur"),
+        ("ood_brightness_acc", "Brightness"),
+        ("avg_ood_acc", "Avg OOD"),
+    ]
+    deltas = [(metrics.loc["sam", column] - metrics.loc["sgd", column]) * 100 for column, _ in categories]
+    colors = ["#b84a4a" if value < 0 else "#2f7d5c" for value in deltas]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar([label for _, label in categories], deltas, color=colors)
+    ax.axhline(0, color="black", linewidth=1)
+    ax.set_ylabel("SAM-SGD Accuracy Difference (percentage points)")
+    ax.set_title("Per-Corruption OOD Gain from SAM")
+    ax.grid(True, axis="y", alpha=0.3)
+    _save_figure(fig, output_path)
+
+
+def plot_best_vs_final_id_acc(
+    sgd_log: pd.DataFrame,
+    sam_log: pd.DataFrame,
+    output_path: str | Path,
+) -> None:
+    """Plot best ID accuracy against final ID accuracy for each optimizer."""
+    rows = [
+        ("SGD", sgd_log),
+        ("SAM-SGD", sam_log),
+    ]
+    labels = [label for label, _ in rows]
+    best_values = [log["id_acc"].max() * 100 for _, log in rows]
+    final_values = [log.iloc[-1]["id_acc"] * 100 for _, log in rows]
+
+    x_positions = range(len(rows))
+    width = 0.34
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.bar([x - width / 2 for x in x_positions], best_values, width, label="Best ID")
+    ax.bar([x + width / 2 for x in x_positions], final_values, width, label="Final ID")
+    ax.set_xticks(list(x_positions))
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("ID Accuracy (%)")
+    ax.set_title("Best vs Final ID Accuracy")
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend()
+    _save_figure(fig, output_path)
+
+
+def plot_checkpoint_comparison(metrics: pd.DataFrame, output_path: str | Path) -> None:
+    """Compare ID and average OOD accuracy across checkpoint strategies."""
+    metrics = _ensure_checkpoint_metrics(metrics)
+    metrics = _sort_checkpoint_metrics(metrics)
+    labels = [
+        f"{_format_optimizer(row['optimizer'])}\n{row['checkpoint_type']}"
+        for _, row in metrics.iterrows()
+    ]
+    x_positions = range(len(metrics))
+    width = 0.36
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.bar(
+        [x - width / 2 for x in x_positions],
+        metrics["id_acc"] * 100,
+        width,
+        label="ID Acc",
+    )
+    ax.bar(
+        [x + width / 2 for x in x_positions],
+        metrics["avg_ood_acc"] * 100,
+        width,
+        label="Avg OOD Acc",
+    )
+    ax.set_xticks(list(x_positions))
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Accuracy (%)")
+    ax.set_title("Checkpoint Strategy Comparison")
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend()
+    _save_figure(fig, output_path)
+
+
+def plot_ood_trajectory(
+    sgd_log: pd.DataFrame,
+    sam_log: pd.DataFrame,
+    output_path: str | Path,
+) -> None:
+    """Plot average OOD accuracy over training epochs."""
+    _require_columns(sgd_log, ["epoch", "avg_ood_acc"])
+    _require_columns(sam_log, ["epoch", "avg_ood_acc"])
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(sgd_log["epoch"], sgd_log["avg_ood_acc"] * 100, marker="o", label="SGD Avg OOD")
+    ax.plot(sam_log["epoch"], sam_log["avg_ood_acc"] * 100, marker="s", label="SAM-SGD Avg OOD")
+
+    for column, label in (
+        ("ood_noise_acc", "Noise"),
+        ("ood_blur_acc", "Blur"),
+        ("ood_brightness_acc", "Brightness"),
+    ):
+        if column in sgd_log.columns and column in sam_log.columns:
+            ax.plot(sgd_log["epoch"], sgd_log[column] * 100, alpha=0.25, linestyle="--")
+            ax.plot(sam_log["epoch"], sam_log[column] * 100, alpha=0.25, linestyle=":")
+
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("OOD Accuracy (%)")
+    ax.set_title("OOD Robustness Trajectory")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    _save_figure(fig, output_path)
+
+
+def plot_generalization_gap(metrics: pd.DataFrame, output_path: str | Path) -> None:
+    """Plot train-ID and ID-OOD generalization gaps."""
+    metrics = _select_checkpoint_rows(metrics, preferred_checkpoint="best_ood")
+    labels = [_format_optimizer(optimizer) for optimizer in metrics["optimizer"]]
+    id_ood_gaps = metrics["id_ood_acc_drop"] * 100
+    has_train_acc = "train_acc" in metrics.columns
+    train_id_gaps = (metrics["train_acc"] - metrics["id_acc"]) * 100 if has_train_acc else None
+
+    x_positions = range(len(metrics))
+    width = 0.34
+    fig, ax = plt.subplots(figsize=(7, 5))
+    if has_train_acc:
+        ax.bar(
+            [x - width / 2 for x in x_positions],
+            train_id_gaps,
+            width,
+            label="Train-ID Gap",
+        )
+        ax.bar(
+            [x + width / 2 for x in x_positions],
+            id_ood_gaps,
+            width,
+            label="ID-OOD Gap",
+        )
+    else:
+        ax.bar(list(x_positions), id_ood_gaps, width=0.5, label="ID-OOD Gap")
+
+    ax.axhline(0, color="black", linewidth=1)
+    ax.set_xticks(list(x_positions))
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Accuracy Gap (percentage points)")
+    ax.set_title("Generalization Gap")
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend()
+    _save_figure(fig, output_path)
+
+
 def create_summary_table(
     metrics_path: str | Path,
     sgd_log_path: str | Path,
     sam_log_path: str | Path,
 ) -> pd.DataFrame:
-    """Create a compact report table from metrics and final epoch logs."""
-    metrics = load_metrics(metrics_path).set_index("optimizer")
-    sgd_final = _read_csv(sgd_log_path).iloc[-1]
-    sam_final = _read_csv(sam_log_path).iloc[-1]
+    """Create a compact report table from checkpoint metrics."""
+    metrics = load_metrics(metrics_path)
+    if "checkpoint_type" not in metrics.columns:
+        sgd_final = _read_csv(sgd_log_path).iloc[-1]
+        sam_final = _read_csv(sam_log_path).iloc[-1]
+        old_metrics = metrics.set_index("optimizer")
+        rows = [
+            _summary_row("SGD", old_metrics.loc["sgd"], sgd_final),
+            _summary_row("SAM-SGD", old_metrics.loc["sam"], sam_final),
+        ]
+        return pd.DataFrame(rows)
 
-    rows = [
-        _summary_row("SGD", metrics.loc["sgd"], sgd_final),
-        _summary_row("SAM-SGD", metrics.loc["sam"], sam_final),
-    ]
+    rows = [_checkpoint_summary_row(row) for _, row in _sort_checkpoint_metrics(metrics).iterrows()]
     return pd.DataFrame(rows)
 
 
@@ -146,14 +309,18 @@ def save_summary_table_png(summary: pd.DataFrame, output_path: str | Path) -> No
     """Save a PNG image of the summary table for direct use in reports."""
     display_table = summary.copy()
     for column in display_table.columns:
-        if column == "Optimizer":
+        if column in {"Optimizer", "Checkpoint"}:
+            continue
+        if column == "Epoch":
+            display_table[column] = display_table[column].map(lambda value: f"{int(value)}")
             continue
         if column == "Train Loss":
             display_table[column] = display_table[column].map(lambda value: f"{value:.4f}")
         else:
             display_table[column] = display_table[column].map(lambda value: f"{value * 100:.2f}%")
 
-    fig, ax = plt.subplots(figsize=(12, 2.4))
+    fig_height = max(2.4, 0.55 * (len(display_table) + 1))
+    fig, ax = plt.subplots(figsize=(13, fig_height))
     ax.axis("off")
     table = ax.table(
         cellText=display_table.values,
@@ -186,6 +353,69 @@ def _summary_row(label: str, metrics_row: pd.Series, final_log_row: pd.Series) -
         "Avg OOD Acc": metrics_row["avg_ood_acc"],
         "ID-OOD Drop": metrics_row["id_ood_acc_drop"],
     }
+
+
+def _checkpoint_summary_row(metrics_row: pd.Series) -> dict[str, float | str]:
+    return {
+        "Optimizer": _format_optimizer(metrics_row["optimizer"]),
+        "Checkpoint": metrics_row["checkpoint_type"],
+        "Epoch": metrics_row["epoch"],
+        "Train Loss": metrics_row["train_loss"],
+        "Train Acc": metrics_row["train_acc"],
+        "ID Acc": metrics_row["id_acc"],
+        "OOD Noise": metrics_row["ood_noise_acc"],
+        "OOD Blur": metrics_row["ood_blur_acc"],
+        "OOD Brightness": metrics_row["ood_brightness_acc"],
+        "Avg OOD Acc": metrics_row["avg_ood_acc"],
+        "ID-OOD Drop": metrics_row["id_ood_acc_drop"],
+    }
+
+
+def _select_checkpoint_rows(
+    metrics: pd.DataFrame,
+    preferred_checkpoint: str,
+) -> pd.DataFrame:
+    if "checkpoint_type" not in metrics.columns:
+        return metrics
+
+    available = set(metrics["checkpoint_type"])
+    checkpoint_type = preferred_checkpoint if preferred_checkpoint in available else "last"
+    return metrics[metrics["checkpoint_type"] == checkpoint_type]
+
+
+def _ensure_checkpoint_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
+    if "checkpoint_type" in metrics.columns:
+        return metrics
+    return metrics.assign(checkpoint_type="last")
+
+
+def _has_columns(dataframe: pd.DataFrame, columns: list[str]) -> bool:
+    return all(column in dataframe.columns for column in columns)
+
+
+def _require_columns(dataframe: pd.DataFrame, columns: list[str]) -> None:
+    missing = [column for column in columns if column not in dataframe.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+
+
+def _format_optimizer(optimizer: str) -> str:
+    if optimizer == "sam":
+        return "SAM-SGD"
+    return optimizer.upper()
+
+
+def _sort_checkpoint_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
+    optimizer_order = {"sgd": 0, "sam": 1}
+    checkpoint_order = {"last": 0, "best_id": 1, "best_ood": 2}
+    return (
+        metrics.assign(
+            _optimizer_order=metrics["optimizer"].map(optimizer_order).fillna(99),
+            _checkpoint_order=metrics["checkpoint_type"].map(checkpoint_order).fillna(99),
+        )
+        .sort_values(["_optimizer_order", "_checkpoint_order", "optimizer", "checkpoint_type"])
+        .drop(columns=["_optimizer_order", "_checkpoint_order"])
+    )
 
 
 def _read_csv(path: str | Path) -> pd.DataFrame:

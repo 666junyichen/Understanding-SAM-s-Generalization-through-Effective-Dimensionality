@@ -22,11 +22,34 @@ from config import (
     WEIGHT_DECAY,
 )
 from data import get_id_test_loader, get_ood_loaders, get_train_loader
-from evaluate import evaluate, evaluate_all
+from evaluate import evaluate_all
 from models import get_model
 from sam import SAM
 from train import train_one_epoch_sam, train_one_epoch_sgd
 from utils import create_dirs, get_device, save_checkpoint, set_seed
+
+
+TRAINING_LOG_FIELDNAMES = [
+    "epoch",
+    "train_loss",
+    "train_acc",
+    "id_loss",
+    "id_acc",
+    "ood_noise_loss",
+    "ood_noise_acc",
+    "ood_blur_loss",
+    "ood_blur_acc",
+    "ood_brightness_loss",
+    "ood_brightness_acc",
+    "avg_ood_acc",
+    "id_ood_acc_drop",
+]
+
+METRICS_FIELDNAMES = [
+    "optimizer",
+    "checkpoint_type",
+    *TRAINING_LOG_FIELDNAMES,
+]
 
 
 def main() -> None:
@@ -45,7 +68,7 @@ def main() -> None:
 
     all_metrics = []
     for optimizer_name in ("sgd", "sam"):
-        training_log, final_metrics = run_single_experiment(
+        training_log, checkpoint_metrics = run_single_experiment(
             optimizer_name=optimizer_name,
             initial_state=initial_state,
             train_loader=train_loader,
@@ -56,12 +79,12 @@ def main() -> None:
         save_csv(
             RESULTS_DIR / f"training_log_{optimizer_name}.csv",
             training_log,
-            ["epoch", "train_loss", "train_acc", "id_loss", "id_acc"],
+            TRAINING_LOG_FIELDNAMES,
         )
-        all_metrics.append({"optimizer": optimizer_name, **final_metrics})
+        all_metrics.extend(checkpoint_metrics)
 
     save_csv(RESULTS_DIR / "metrics.csv", all_metrics, _metric_fieldnames(all_metrics))
-    print(f"Saved final metrics to {RESULTS_DIR / 'metrics.csv'}")
+    print(f"Saved checkpoint metrics to {RESULTS_DIR / 'metrics.csv'}")
 
 
 def run_single_experiment(
@@ -71,7 +94,7 @@ def run_single_experiment(
     id_loader,
     ood_loaders,
     device: torch.device,
-) -> tuple[list[dict[str, float]], dict[str, float]]:
+) -> tuple[list[dict[str, float]], list[dict[str, float | str]]]:
     """Train and evaluate one optimizer from a shared initialization."""
     model = get_model(MODEL_NAME).to(device)
     model.load_state_dict(initial_state)
@@ -79,42 +102,79 @@ def run_single_experiment(
     optimizer = build_optimizer(optimizer_name, model)
 
     training_log = []
+    checkpoint_metrics = {}
+    best_id_acc = float("-inf")
+    best_avg_ood_acc = float("-inf")
     train_one_epoch = train_one_epoch_sam if optimizer_name == "sam" else train_one_epoch_sgd
 
     for epoch in range(1, EPOCHS + 1):
         train_metrics = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        id_metrics = evaluate(model, id_loader, criterion, device)
+        eval_metrics = evaluate_all(model, id_loader, ood_loaders, criterion, device)
         epoch_row = {
             "epoch": epoch,
             "train_loss": train_metrics["loss"],
             "train_acc": train_metrics["accuracy"],
-            "id_loss": id_metrics["loss"],
-            "id_acc": id_metrics["accuracy"],
+            **eval_metrics,
         }
         training_log.append(epoch_row)
+
+        if epoch_row["id_acc"] > best_id_acc:
+            best_id_acc = epoch_row["id_acc"]
+            checkpoint_metrics["best_id"] = dict(epoch_row)
+            _save_experiment_checkpoint(optimizer_name, "best_id", epoch_row, model, optimizer)
+
+        if epoch_row["avg_ood_acc"] > best_avg_ood_acc:
+            best_avg_ood_acc = epoch_row["avg_ood_acc"]
+            checkpoint_metrics["best_ood"] = dict(epoch_row)
+            _save_experiment_checkpoint(optimizer_name, "best_ood", epoch_row, model, optimizer)
+
         print(
             f"[{optimizer_name.upper()}] "
             f"Epoch {epoch}/{EPOCHS} "
             f"train_acc={epoch_row['train_acc']:.4f} "
-            f"id_acc={epoch_row['id_acc']:.4f}"
+            f"id_acc={epoch_row['id_acc']:.4f} "
+            f"avg_ood_acc={epoch_row['avg_ood_acc']:.4f}"
         )
 
-    final_metrics = evaluate_all(model, id_loader, ood_loaders, criterion, device)
-    checkpoint_path = CHECKPOINT_DIR / f"{optimizer_name}_{MODEL_NAME.lower()}_cifar10.pt"
+    checkpoint_metrics["last"] = dict(training_log[-1])
+    _save_experiment_checkpoint(optimizer_name, "last", training_log[-1], model, optimizer)
+
+    metrics_rows = []
+    for checkpoint_type in ("last", "best_id", "best_ood"):
+        metrics_rows.append(
+            {
+                "optimizer": optimizer_name,
+                "checkpoint_type": checkpoint_type,
+                **checkpoint_metrics[checkpoint_type],
+            }
+        )
+
+    return training_log, metrics_rows
+
+
+def _save_experiment_checkpoint(
+    optimizer_name: str,
+    checkpoint_type: str,
+    metrics: dict[str, float],
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+) -> None:
+    checkpoint_path = (
+        CHECKPOINT_DIR / f"{optimizer_name}_{MODEL_NAME.lower()}_cifar10_{checkpoint_type}.pt"
+    )
     save_checkpoint(
         {
             "optimizer_name": optimizer_name,
+            "checkpoint_type": checkpoint_type,
             "model_name": MODEL_NAME,
-            "epoch": EPOCHS,
+            "epoch": metrics["epoch"],
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "final_metrics": final_metrics,
+            "metrics": metrics,
         },
         checkpoint_path,
     )
-    print(f"Saved {optimizer_name.upper()} checkpoint to {checkpoint_path}")
-
-    return training_log, final_metrics
+    print(f"Saved {optimizer_name.upper()} {checkpoint_type} checkpoint to {checkpoint_path}")
 
 
 def build_optimizer(optimizer_name: str, model: nn.Module) -> torch.optim.Optimizer:
@@ -141,7 +201,7 @@ def build_optimizer(optimizer_name: str, model: nn.Module) -> torch.optim.Optimi
     raise ValueError(f"Unknown optimizer name: {optimizer_name}")
 
 
-def save_csv(path: str | Path, rows: list[dict[str, float]], fieldnames: list[str]) -> None:
+def save_csv(path: str | Path, rows: list[dict[str, float | str]], fieldnames: list[str]) -> None:
     """Save rows to a CSV file with a stable column order."""
     csv_path = Path(path)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -152,25 +212,12 @@ def save_csv(path: str | Path, rows: list[dict[str, float]], fieldnames: list[st
         writer.writerows(rows)
 
 
-def _metric_fieldnames(rows: list[dict[str, float]]) -> list[str]:
+def _metric_fieldnames(rows: list[dict[str, float | str]]) -> list[str]:
     if not rows:
         raise ValueError("Cannot infer metric columns from an empty result list.")
 
-    preferred = [
-        "optimizer",
-        "id_loss",
-        "id_acc",
-        "ood_noise_loss",
-        "ood_noise_acc",
-        "ood_blur_loss",
-        "ood_blur_acc",
-        "ood_brightness_loss",
-        "ood_brightness_acc",
-        "avg_ood_acc",
-        "id_ood_acc_drop",
-    ]
-    extra = sorted({key for row in rows for key in row if key not in preferred})
-    return [key for key in preferred if key in rows[0]] + extra
+    extra = sorted({key for row in rows for key in row if key not in METRICS_FIELDNAMES})
+    return [key for key in METRICS_FIELDNAMES if key in rows[0]] + extra
 
 
 if __name__ == "__main__":
