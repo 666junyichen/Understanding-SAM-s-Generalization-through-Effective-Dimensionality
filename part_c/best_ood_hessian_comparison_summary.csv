@@ -1,0 +1,2 @@
+checkpoint,trace_reduction_pct,top1_reduction_pct,sum_topk_reduction_pct,top1_fraction_sgd_minus_sam,top5_fraction_sgd_minus_sam,Neff_z1_sgd_minus_sam_topk
+best_ood,44.234441050495434,57.963706328346476,37.512353266728006,0.08805299470362837,0.016782215979620374,0.56919332725872
