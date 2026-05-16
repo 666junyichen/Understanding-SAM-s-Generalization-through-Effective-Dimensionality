@@ -114,6 +114,28 @@ id_ood_acc_drop
 
 The updated training logs store one row per epoch with train, ID, and OOD metrics. These logs support trajectory plots and justify separating `last`, `best_id`, and `best_ood`.
 
+## Latest Colab Results
+
+The current Part A results were generated on Google Colab with GPU using the updated checkpoint strategy. The full CSV files are in `results/`, and checkpoints have been shared with group members through Google Drive.
+
+Summary from `results/summary_table.csv`:
+
+```text
+Optimizer  Checkpoint  Epoch  ID Acc  OOD Noise  OOD Blur  OOD Brightness  Avg OOD Acc
+SGD        last        50     0.8024  0.2296     0.6068    0.7437          0.5267
+SGD        best_id     40     0.8682  0.1159     0.5917    0.8155          0.5077
+SGD        best_ood    41     0.8477  0.2246     0.6391    0.8066          0.5568
+SAM-SGD    last        50     0.8460  0.1805     0.6538    0.7756          0.5366
+SAM-SGD    best_id     45     0.8758  0.1444     0.5986    0.8346          0.5259
+SAM-SGD    best_ood    17     0.8622  0.2994     0.6587    0.8169          0.5917
+```
+
+Main Part A takeaway:
+
+- SAM-SGD improves the best ID checkpoint over SGD (`0.8758` vs `0.8682`).
+- SAM-SGD improves the best average OOD checkpoint over SGD (`0.5917` vs `0.5568`).
+- The OOD improvement is corruption-dependent, so noise, blur, and brightness should be discussed separately instead of only reporting average OOD accuracy.
+
 ## Expected Checkpoints
 
 ```text
@@ -146,5 +168,6 @@ figures/summary_table.png
 Generated datasets, checkpoints, logs, metrics, and figures are ignored by Git by default. For sharing:
 
 - upload source code and notebook files to GitHub;
+- upload lightweight CSV results and report PNG figures to GitHub when they are part of the report;
 - share `.pt` checkpoints through Google Drive, not GitHub;
 - do not upload CIFAR-10 data, zip files, or large raw generated files.
