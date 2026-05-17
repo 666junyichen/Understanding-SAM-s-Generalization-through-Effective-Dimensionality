@@ -16,16 +16,18 @@ NUM_CLASSES = 10
 
 SEED = 42
 BATCH_SIZE = 128
-
 NUM_WORKERS = 0
 EPOCHS = 50
 DEBUG_SUBSET_SIZE = None
 
 LR = 0.1
+LR_SCHEDULER = "cosine"
 MOMENTUM = 0.9
 WEIGHT_DECAY = 5e-4
 
 SAM_RHO = 0.05
+SAM_RHO_SWEEP_VALUES = (0.01, 0.05, 0.1, 0.2)
+VAL_FRACTION = 0.1
 
 OOD_CORRUPTIONS = ("gaussian_noise", "blur", "brightness")
 

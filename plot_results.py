@@ -39,6 +39,17 @@ def main() -> None:
     else:
         print("Skipped ood_trajectory.png because training logs do not contain OOD metrics yet.")
 
+    if _has_columns(sgd_log, ["lr"]):
+        plot_lr_schedule_curve(sgd_log, FIGURES_DIR / "lr_schedule_curve.png")
+    else:
+        print("Skipped lr_schedule_curve.png because training logs do not contain lr yet.")
+
+    rho_sweep_path = RESULTS_DIR / "rho_sweep.csv"
+    if rho_sweep_path.exists():
+        plot_rho_sweep(pd.read_csv(rho_sweep_path), FIGURES_DIR / "rho_sweep.png")
+    else:
+        print("Skipped rho_sweep.png because results/rho_sweep.csv does not exist yet.")
+
     summary = create_summary_table(metrics_path, sgd_log_path, sam_log_path)
     summary.to_csv(RESULTS_DIR / "summary_table.csv", index=False)
     save_summary_table_png(summary, FIGURES_DIR / "summary_table.png")
@@ -280,6 +291,51 @@ def plot_generalization_gap(metrics: pd.DataFrame, output_path: str | Path) -> N
     ax.set_ylabel("Accuracy Gap (percentage points)")
     ax.set_title("Generalization Gap")
     ax.grid(True, axis="y", alpha=0.3)
+    ax.legend()
+    _save_figure(fig, output_path)
+
+
+def plot_lr_schedule_curve(training_log: pd.DataFrame, output_path: str | Path) -> None:
+    """Plot the learning-rate schedule recorded in a training log."""
+    _require_columns(training_log, ["epoch", "lr"])
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(training_log["epoch"], training_log["lr"], marker="o", color="#356a9a")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Learning Rate")
+    ax.set_title("Cosine Learning-Rate Schedule")
+    ax.grid(True, alpha=0.3)
+    _save_figure(fig, output_path)
+
+
+def plot_rho_sweep(rho_sweep: pd.DataFrame, output_path: str | Path) -> None:
+    """Plot validation performance across SAM rho values."""
+    _require_columns(rho_sweep, ["rho", "best_val_acc"])
+    rho_sweep = rho_sweep.sort_values("rho")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(
+        rho_sweep["rho"].astype(str),
+        rho_sweep["best_val_acc"] * 100,
+        marker="o",
+        linewidth=2,
+        color="#2f7d5c",
+    )
+
+    best_index = rho_sweep["best_val_acc"].idxmax()
+    best_row = rho_sweep.loc[best_index]
+    ax.scatter(
+        [str(best_row["rho"])],
+        [best_row["best_val_acc"] * 100],
+        color="#b84a4a",
+        zorder=3,
+        label=f"Best rho={best_row['rho']}",
+    )
+
+    ax.set_xlabel("SAM rho")
+    ax.set_ylabel("Best Validation Accuracy (%)")
+    ax.set_title("SAM rho Validation Sweep")
+    ax.grid(True, alpha=0.3)
     ax.legend()
     _save_figure(fig, output_path)
 
