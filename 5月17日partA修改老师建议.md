@@ -49,12 +49,7 @@ figures/lr_schedule_curve.png
 
 这张图用来证明训练不再是固定 `LR=0.1`，而是随 epoch 使用 cosine schedule 下降。
 
-不再生成：
-
-```text
-rho_sweep.csv
-rho_sweep.png
-```
+不再生成额外的 rho 搜索结果表或 rho 搜索图片。
 
 ## Part A/B/C 叙事骨架
 
@@ -87,4 +82,3 @@ README.md
 Run_PartA_Colab.ipynb
 5月17日partA修改老师建议.md
 ```
-
