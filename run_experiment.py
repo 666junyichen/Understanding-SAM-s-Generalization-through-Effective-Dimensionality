@@ -191,11 +191,7 @@ def _save_experiment_checkpoint(
     print(f"Saved {optimizer_name.upper()} {checkpoint_type} checkpoint to {checkpoint_path}")
 
 
-def build_optimizer(
-    optimizer_name: str,
-    model: nn.Module,
-    sam_rho: float = SAM_RHO,
-) -> torch.optim.Optimizer:
+def build_optimizer(optimizer_name: str, model: nn.Module) -> torch.optim.Optimizer:
     """Create the optimizer used by one experimental condition."""
     optimizer_name = optimizer_name.lower()
 
@@ -213,7 +209,7 @@ def build_optimizer(
             lr=LR,
             momentum=MOMENTUM,
             weight_decay=WEIGHT_DECAY,
-            rho=sam_rho,
+            rho=SAM_RHO,
         )
 
     raise ValueError(f"Unknown optimizer name: {optimizer_name}")

@@ -184,18 +184,11 @@ class PlotResultsTests(unittest.TestCase):
                 self.assertTrue(output_path.exists())
                 self.assertGreater(output_path.stat().st_size, 0)
 
-    def test_protocol_plots_create_png_files(self):
-        from plot_results import plot_lr_schedule_curve, plot_rho_sweep
+    def test_lr_schedule_plot_creates_png_file(self):
+        from plot_results import plot_lr_schedule_curve
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-            rho_sweep = pd.DataFrame(
-                [
-                    {"rho": 0.01, "best_val_acc": 0.80, "best_val_loss": 0.60, "best_epoch": 37},
-                    {"rho": 0.05, "best_val_acc": 0.84, "best_val_loss": 0.52, "best_epoch": 41},
-                    {"rho": 0.10, "best_val_acc": 0.82, "best_val_loss": 0.55, "best_epoch": 35},
-                ]
-            )
             training_log = pd.DataFrame(
                 [
                     {"epoch": 1, "lr": 0.1},
@@ -204,14 +197,10 @@ class PlotResultsTests(unittest.TestCase):
                 ]
             )
 
-            rho_output = tmp_path / "rho_sweep.png"
             lr_output = tmp_path / "lr_schedule_curve.png"
 
-            plot_rho_sweep(rho_sweep, rho_output)
             plot_lr_schedule_curve(training_log, lr_output)
 
-            self.assertTrue(rho_output.exists())
-            self.assertGreater(rho_output.stat().st_size, 0)
             self.assertTrue(lr_output.exists())
             self.assertGreater(lr_output.stat().st_size, 0)
 

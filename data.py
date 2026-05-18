@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 from PIL import ImageEnhance
-from torch.utils.data import DataLoader, Dataset, Subset, random_split
+from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets, transforms
 
 from config import (
@@ -21,7 +21,6 @@ from config import (
     NUM_WORKERS,
     OOD_CORRUPTIONS,
     SEED,
-    VAL_FRACTION,
 )
 
 
@@ -123,68 +122,6 @@ def get_train_loader(
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
         generator=generator,
-    )
-
-
-def get_train_val_loaders(
-    batch_size: int = BATCH_SIZE,
-    num_workers: int = NUM_WORKERS,
-    download: bool = True,
-    subset_size: int | None = None,
-    val_fraction: float = VAL_FRACTION,
-    dataset_factory: Callable[..., Dataset] = datasets.CIFAR10,
-) -> tuple[DataLoader, DataLoader]:
-    """Return train and validation loaders split from CIFAR-10 training data."""
-    if not 0.0 < val_fraction < 1.0:
-        raise ValueError("val_fraction must be between 0 and 1.")
-
-    train_dataset = dataset_factory(
-        root=str(DATA_DIR),
-        train=True,
-        download=download,
-        transform=get_train_transform(),
-    )
-    val_dataset = dataset_factory(
-        root=str(DATA_DIR),
-        train=True,
-        download=download,
-        transform=get_id_test_transform(),
-    )
-
-    if subset_size is not None:
-        train_dataset = _maybe_subset(train_dataset, subset_size)
-        val_dataset = _maybe_subset(val_dataset, subset_size)
-
-    val_size = max(1, int(len(train_dataset) * val_fraction))
-    train_size = len(train_dataset) - val_size
-    if train_size <= 0:
-        raise ValueError("Validation split leaves no training examples.")
-
-    generator = torch.Generator().manual_seed(SEED)
-    train_indices, val_indices = random_split(
-        range(len(train_dataset)),
-        [train_size, val_size],
-        generator=generator,
-    )
-    train_subset = Subset(train_dataset, train_indices.indices)
-    val_subset = Subset(val_dataset, val_indices.indices)
-
-    return (
-        DataLoader(
-            train_subset,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=num_workers,
-            pin_memory=torch.cuda.is_available(),
-            generator=generator,
-        ),
-        DataLoader(
-            val_subset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=torch.cuda.is_available(),
-        ),
     )
 
 
