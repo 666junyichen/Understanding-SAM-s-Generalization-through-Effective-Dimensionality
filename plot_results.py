@@ -39,11 +39,6 @@ def main() -> None:
     else:
         print("Skipped ood_trajectory.png because training logs do not contain OOD metrics yet.")
 
-    if _has_columns(sgd_log, ["lr"]):
-        plot_lr_schedule_curve(sgd_log, FIGURES_DIR / "lr_schedule_curve.png")
-    else:
-        print("Skipped lr_schedule_curve.png because training logs do not contain lr yet.")
-
     summary = create_summary_table(metrics_path, sgd_log_path, sam_log_path)
     summary.to_csv(RESULTS_DIR / "summary_table.csv", index=False)
     save_summary_table_png(summary, FIGURES_DIR / "summary_table.png")
@@ -286,19 +281,6 @@ def plot_generalization_gap(metrics: pd.DataFrame, output_path: str | Path) -> N
     ax.set_title("Generalization Gap")
     ax.grid(True, axis="y", alpha=0.3)
     ax.legend()
-    _save_figure(fig, output_path)
-
-
-def plot_lr_schedule_curve(training_log: pd.DataFrame, output_path: str | Path) -> None:
-    """Plot the learning-rate schedule recorded in a training log."""
-    _require_columns(training_log, ["epoch", "lr"])
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(training_log["epoch"], training_log["lr"], marker="o", color="#356a9a")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Learning Rate")
-    ax.set_title("Cosine Learning-Rate Schedule")
-    ax.grid(True, alpha=0.3)
     _save_figure(fig, output_path)
 
 

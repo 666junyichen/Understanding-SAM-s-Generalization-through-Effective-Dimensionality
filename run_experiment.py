@@ -14,7 +14,6 @@ from config import (
     DEBUG_SUBSET_SIZE,
     EPOCHS,
     LR,
-    LR_SCHEDULER,
     MODEL_NAME,
     MOMENTUM,
     RESULTS_DIR,
@@ -32,7 +31,6 @@ from utils import create_dirs, get_device, save_checkpoint, set_seed
 
 TRAINING_LOG_FIELDNAMES = [
     "epoch",
-    "lr",
     "train_loss",
     "train_acc",
     "id_loss",
@@ -102,7 +100,6 @@ def run_single_experiment(
     model.load_state_dict(initial_state)
     criterion = nn.CrossEntropyLoss()
     optimizer = build_optimizer(optimizer_name, model)
-    scheduler = build_scheduler(optimizer)
 
     training_log = []
     checkpoint_metrics = {}
@@ -111,12 +108,10 @@ def run_single_experiment(
     train_one_epoch = train_one_epoch_sam if optimizer_name == "sam" else train_one_epoch_sgd
 
     for epoch in range(1, EPOCHS + 1):
-        current_lr = get_current_lr(optimizer)
         train_metrics = train_one_epoch(model, train_loader, optimizer, criterion, device)
         eval_metrics = evaluate_all(model, id_loader, ood_loaders, criterion, device)
         epoch_row = {
             "epoch": epoch,
-            "lr": current_lr,
             "train_loss": train_metrics["loss"],
             "train_acc": train_metrics["accuracy"],
             **eval_metrics,
@@ -126,29 +121,23 @@ def run_single_experiment(
         if epoch_row["id_acc"] > best_id_acc:
             best_id_acc = epoch_row["id_acc"]
             checkpoint_metrics["best_id"] = dict(epoch_row)
-            _save_experiment_checkpoint(
-                optimizer_name, "best_id", epoch_row, model, optimizer, scheduler
-            )
+            _save_experiment_checkpoint(optimizer_name, "best_id", epoch_row, model, optimizer)
 
         if epoch_row["avg_ood_acc"] > best_avg_ood_acc:
             best_avg_ood_acc = epoch_row["avg_ood_acc"]
             checkpoint_metrics["best_ood"] = dict(epoch_row)
-            _save_experiment_checkpoint(
-                optimizer_name, "best_ood", epoch_row, model, optimizer, scheduler
-            )
+            _save_experiment_checkpoint(optimizer_name, "best_ood", epoch_row, model, optimizer)
 
         print(
             f"[{optimizer_name.upper()}] "
             f"Epoch {epoch}/{EPOCHS} "
-            f"lr={current_lr:.6f} "
             f"train_acc={epoch_row['train_acc']:.4f} "
             f"id_acc={epoch_row['id_acc']:.4f} "
             f"avg_ood_acc={epoch_row['avg_ood_acc']:.4f}"
         )
-        scheduler.step()
 
     checkpoint_metrics["last"] = dict(training_log[-1])
-    _save_experiment_checkpoint(optimizer_name, "last", training_log[-1], model, optimizer, scheduler)
+    _save_experiment_checkpoint(optimizer_name, "last", training_log[-1], model, optimizer)
 
     metrics_rows = []
     for checkpoint_type in ("last", "best_id", "best_ood"):
@@ -169,7 +158,6 @@ def _save_experiment_checkpoint(
     metrics: dict[str, float],
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler.LRScheduler,
 ) -> None:
     checkpoint_path = (
         CHECKPOINT_DIR / f"{optimizer_name}_{MODEL_NAME.lower()}_cifar10_{checkpoint_type}.pt"
@@ -180,10 +168,8 @@ def _save_experiment_checkpoint(
             "checkpoint_type": checkpoint_type,
             "model_name": MODEL_NAME,
             "epoch": metrics["epoch"],
-            "lr_scheduler": LR_SCHEDULER,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
             "metrics": metrics,
         },
         checkpoint_path,
@@ -213,20 +199,6 @@ def build_optimizer(optimizer_name: str, model: nn.Module) -> torch.optim.Optimi
         )
 
     raise ValueError(f"Unknown optimizer name: {optimizer_name}")
-
-
-def build_scheduler(optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler.LRScheduler:
-    """Create the learning-rate scheduler for the shared training protocol."""
-    if LR_SCHEDULER == "cosine":
-        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
-    if LR_SCHEDULER in {"none", None}:
-        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda _epoch: 1.0)
-    raise ValueError(f"Unknown LR scheduler: {LR_SCHEDULER}")
-
-
-def get_current_lr(optimizer: torch.optim.Optimizer) -> float:
-    """Return the current learning rate from the first optimizer parameter group."""
-    return float(optimizer.param_groups[0]["lr"])
 
 
 def save_csv(path: str | Path, rows: list[dict[str, float | str]], fieldnames: list[str]) -> None:

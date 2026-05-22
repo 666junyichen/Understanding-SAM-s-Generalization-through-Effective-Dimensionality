@@ -5,8 +5,6 @@ This repository contains the Part A experiment for comparing standard SGD and Sh
 The Part A goal is to establish the performance phenomenon clearly:
 
 - train SGD and SAM-SGD from the same initialization;
-- use a matched cosine learning-rate schedule for both optimizers;
-- use `SAM_RHO = 0.05`, following the original SAM setting used in common CIFAR-style experiments;
 - evaluate in-distribution CIFAR-10 test accuracy;
 - evaluate OOD robustness under Gaussian noise, blur, and brightness shifts;
 - save `last`, `best_id`, and `best_ood` checkpoints for each optimizer;
@@ -69,7 +67,7 @@ pip install -r requirements.txt
 python run_experiment.py
 ```
 
-The experiment evaluates ID and OOD metrics at every epoch using the shared cosine learning-rate schedule configured in `config.py`. It saves three checkpoint strategies for each optimizer:
+The experiment evaluates ID and OOD metrics at every epoch. It saves three checkpoint strategies for each optimizer:
 
 - `last`: final training epoch.
 - `best_id`: epoch with the highest ID accuracy.
@@ -100,7 +98,6 @@ The updated `metrics.csv` stores one row per optimizer/checkpoint strategy:
 optimizer
 checkpoint_type
 epoch
-lr
 train_loss
 train_acc
 id_loss
@@ -161,12 +158,10 @@ figures/best_vs_final_id_acc.png
 figures/checkpoint_comparison.png
 figures/ood_trajectory.png
 figures/generalization_gap.png
-figures/lr_schedule_curve.png
 figures/summary_table.png
 ```
 
 `ood_trajectory.png` requires rerunning `run_experiment.py` with the updated per-epoch OOD logging. If old training logs are still present, `plot_results.py` will skip that figure and print a message.
-`lr_schedule_curve.png` requires training logs with an `lr` column.
 
 ## GitHub / Sharing Notes
 

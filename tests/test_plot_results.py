@@ -184,26 +184,6 @@ class PlotResultsTests(unittest.TestCase):
                 self.assertTrue(output_path.exists())
                 self.assertGreater(output_path.stat().st_size, 0)
 
-    def test_lr_schedule_plot_creates_png_file(self):
-        from plot_results import plot_lr_schedule_curve
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            training_log = pd.DataFrame(
-                [
-                    {"epoch": 1, "lr": 0.1},
-                    {"epoch": 2, "lr": 0.05},
-                    {"epoch": 3, "lr": 0.0},
-                ]
-            )
-
-            lr_output = tmp_path / "lr_schedule_curve.png"
-
-            plot_lr_schedule_curve(training_log, lr_output)
-
-            self.assertTrue(lr_output.exists())
-            self.assertGreater(lr_output.stat().st_size, 0)
-
 
 def _metrics_row(
     optimizer,

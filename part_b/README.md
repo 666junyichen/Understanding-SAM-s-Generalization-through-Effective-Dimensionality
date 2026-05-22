@@ -1,35 +1,47 @@
-# Part B: Flatness Analysis
+# Part B: Gradient-Direction Sharpness Proxy
 
-This folder contains the flatness analysis for the SAM project. It uses the trained SGD and SAM-SGD checkpoints produced by Part A and compares their local loss sensitivity.
+This folder contains the Part B local sensitivity analysis for the SAM project. Following the feedback, this section does not claim that SAM is fully explained by "flatness" alone. Instead, it asks a narrower question:
+
+> Under controlled gradient-direction perturbations, is the SAM checkpoint less sensitive than the SGD checkpoint?
+
+This keeps Part B aligned with the overall project narrative: Part B measures local loss sensitivity, while Part C studies Hessian spectral structure and effective directions. Together, they are used to discuss which geometric properties SAM appears to change.
+
+## Checkpoint Choice
+
+The notebook is configured to use the Part A best-ID checkpoints:
+
+```text
+checkpoints/sgd_resnet18_cifar10_best_id.pt
+checkpoints/sam_resnet18_cifar10_best_id.pt
+```
+
+This is intentional because Part B evaluates fixed in-distribution CIFAR-10 test batches. The last checkpoint is not used as the primary analysis target, since the final epoch can be worse than the best checkpoint selected in Part A. If the report discusses robustness rather than ID behavior, the same analysis can be repeated with the `best_ood` checkpoints as a sensitivity check.
 
 ## Method
 
-Part B uses a gradient-direction perturbation sharpness proxy on fixed CIFAR-10 in-distribution test batches.
+Part B uses a gradient-direction perturbation sharpness proxy on fixed CIFAR-10 in-distribution batches. For each model, batch, and perturbation radius `rho`:
 
-For each model, batch, and perturbation radius `rho`:
-
-1. Compute the base loss.
-2. Compute the gradient of the loss with respect to model parameters.
+1. Compute the base cross-entropy loss.
+2. Compute the gradient of the loss with respect to the model parameters.
 3. Perturb parameters in the normalized gradient direction.
-4. Compute the perturbed loss.
-5. Define sharpness as:
+4. Compute the perturbed loss on the same batch.
+5. Define the local sensitivity score as:
 
 ```text
-sharpness = perturbed_loss - base_loss
+sharpness_proxy = perturbed_loss - base_loss
 ```
 
-This is not a full Hessian sharpness estimate and not a worst-case sharpness over all directions. It is a controlled perturbation-based proxy for local flatness.
+This is a first-order, gradient-aligned perturbation proxy. It is not a full Hessian sharpness estimate, not a worst-case search over all directions, and not a global characterization of the loss landscape.
 
-## Inputs
+## Perturbation Radii
 
-The notebook expects the Part A checkpoints:
+The sweep uses:
 
 ```text
-checkpoints/sgd_resnet18_cifar10.pt
-checkpoints/sam_resnet18_cifar10.pt
+rho = 0.001, 0.005, 0.01, 0.05
 ```
 
-The checkpoints are not committed to GitHub because they are large model artifacts. Share them through Google Drive.
+These values test whether the conclusion is stable from very small local perturbations up to the same order as the SAM training radius used in Part A (`SAM_RHO = 0.05`). The fixed-rho boxplot uses `rho = 0.01` as a representative local perturbation: it is large enough to show visible separation while remaining smaller than the training-time radius.
 
 ## Outputs
 
@@ -41,21 +53,38 @@ batch_averaged_gradient_sharpness.png
 batchwise_sharpness_boxplot.png
 ```
 
-## Key Finding
+After rerunning the notebook with the best-ID checkpoints, these files should be refreshed and used in the final report.
 
-SAM-SGD shows lower gradient-direction sharpness than SGD across the tested perturbation radii. For example, at `rho = 0.01`:
+## Interpretation
 
-```text
-SGD mean sharpness = 0.0933
-SAM mean sharpness = 0.0382
-```
+The expected interpretation should stay conservative:
 
-This supports the traditional explanation that SAM tends to find flatter minima.
+> SAM shows lower gradient-direction local loss sensitivity than SGD across the tested `rho` values. This supports the claim that SAM changes the local geometry around the selected checkpoint, but it should be described as evidence from a sharpness proxy rather than a complete proof that SAM generalizes because it finds globally flatter minima.
+
+This wording directly avoids the overclaim that "traditional flatness fully explains SAM." Recent work argues that SAM's generalization behavior cannot always be reduced to a single sharpness measure, so Part B should be treated as one piece of evidence and connected with Part C.
 
 ## Report Wording
 
 Recommended wording:
 
-> We evaluate flatness using a gradient-direction perturbation-based sharpness proxy on fixed in-distribution batches. Lower sharpness indicates that the loss increases less under a controlled local perturbation.
+> We evaluate local sensitivity using a gradient-direction perturbation sharpness proxy on fixed in-distribution CIFAR-10 batches. Lower values mean that the batch loss increases less under a controlled parameter perturbation. Across the tested perturbation radii, the SAM checkpoint exhibits lower local loss sensitivity than the SGD checkpoint, suggesting that SAM changes the local geometry of the learned solution. We do not treat this proxy as a full Hessian analysis or as a complete explanation of SAM's generalization behavior.
 
-Avoid claiming that this is a full Hessian analysis or an exact global characterization of the loss landscape.
+Avoid:
+
+```text
+Part B proves that SAM finds flatter minima.
+```
+
+Prefer:
+
+```text
+Part B provides proxy evidence that SAM is less sensitive to local gradient-aligned parameter perturbations.
+```
+
+## References
+
+- Foret, P., Kleiner, A., Mobahi, H., & Neyshabur, B. (2021). Sharpness-Aware Minimization for Efficiently Improving Generalization. ICLR 2021. https://openreview.net/forum?id=6Tm1mposlrM
+- Andriushchenko, M., & Flammarion, N. (2022). Towards Understanding Sharpness-Aware Minimization. ICML 2022. https://proceedings.mlr.press/v162/andriushchenko22a.html
+- Kaur, S., Cohen, J., & Lipton, Z. C. (2023). On the Maximum Hessian Eigenvalue and Generalization. PMLR 187. https://proceedings.mlr.press/v187/kaur23a.html
+- Wen, K., Li, Z., & Ma, T. (2023). Sharpness Minimization Algorithms Do Not Only Minimize Sharpness To Achieve Better Generalization. NeurIPS 2023. https://papers.nips.cc/paper_files/paper/2023/hash/0354767c6386386be17cabe4fc59711b-Abstract-Conference.html
+- Mueller, M., Vlaar, T., Rolnick, D., & Hein, M. (2023). Normalization Layers Are All That Sharpness-Aware Minimization Needs. arXiv:2306.04226. https://arxiv.org/abs/2306.04226
